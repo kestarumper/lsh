@@ -73,7 +73,7 @@ pid_t spawn_process(char ** args, int in, int out)
   return pid;
 }
 
-int lsh_launch(char ** commands, int n, int run_in_bg)
+int lsh_launch(char ** commands, int n, int run_in_bg, int redirect_type, char * redirect_file)
 {
   char ** com_args;
 
@@ -125,6 +125,12 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
   for (i = 0; i < lsh_inbuilt_functions_size; i++) {
     if (strcmp(com_args[0], lsh_inbuilt_names[i]) == 0) {
       return (*lsh_inbuilt_functions[i])(com_args);
+    }
+  }
+
+  if(redirect_type > 0) {
+    switch(redirect_type) {
+      //TODO
     }
   }
   
@@ -215,10 +221,15 @@ void lsh_loop()
   int status;
   int comnum;
   int run_in_bg;
+
+  char * redirect_file;
+  int redirect_type = -1;
+
   char * ampersand_pos = NULL;
   char * redirect_pos = NULL;
 
   do {
+    redirect_type = -1; // -1 means no redirect
     run_in_bg = 0;
     ampersand_pos = NULL;
     redirect_pos = NULL;
@@ -233,11 +244,31 @@ void lsh_loop()
       run_in_bg = 1;
     }
 
+    if(redirect_pos = strchr(line, '>')) {
+      redirect_type = STDOUT_FILENO;
+      *redirect_pos = '\0';
+      redirect_file = redirect_pos+1;
+      while(*redirect_file == ' ') { 
+        redirect_file++;
+      }
+      printf("Redirecting to file[%s]\n", redirect_file);
+    }
+
+    if(redirect_pos = strchr(line, '<')) {
+      redirect_type = STDIN_FILENO;
+      *redirect_pos = '\0';
+      redirect_file = redirect_pos+1;
+      while(*redirect_file == ' ') { 
+        redirect_file++;
+      }
+      printf("Redirecting from file[%s]\n", redirect_file);
+    }
+
     commands = lsh_split(line, "|");
 
     for(comnum = 0; commands[comnum] != NULL; comnum++);
 
-    status = lsh_launch(commands, comnum, run_in_bg);
+    status = lsh_launch(commands, comnum, run_in_bg, redirect_type, redirect_file);
 
   } while(1);
 }
