@@ -114,11 +114,20 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
   // }
 
   com_args = lsh_split(commands[i], LSH_TOKEN_DELIMITERS);
+
+
   // Check if not empty
   if (com_args[0] == NULL) {
     // An empty command was entered.
     return EXIT_SUCCESS;
   }
+
+  for (i = 0; i < lsh_inbuilt_functions_size; i++) {
+    if (strcmp(com_args[0], lsh_inbuilt_names[i]) == 0) {
+      return (*lsh_inbuilt_functions[i])(com_args);
+    }
+  }
+  
   pid = spawn_process(com_args, in, WRITE_FD);
 
   // wait (or dont) for process
@@ -245,6 +254,7 @@ void lsh_loop()
   int status;
   int comnum;
   int run_in_bg;
+  char * ampersand_pos = NULL;
 
   do {
     run_in_bg = 0;
@@ -253,7 +263,8 @@ void lsh_loop()
 
     line = lsh_readline();
 
-    if(strchr(line, '&')) {
+    if(ampersand_pos = strchr(line, '&')) {
+      *ampersand_pos = '\0';
       run_in_bg = 1;
     }
 
