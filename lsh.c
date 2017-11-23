@@ -216,15 +216,19 @@ void lsh_loop()
   int comnum;
   int run_in_bg;
   char * ampersand_pos = NULL;
+  char * redirect_pos = NULL;
 
   do {
     run_in_bg = 0;
+    ampersand_pos = NULL;
+    redirect_pos = NULL;
 
     printf("> ");
 
     line = lsh_readline();
 
     if(ampersand_pos = strchr(line, '&')) {
+      // remove ampersand from args and replace it with null byte
       *ampersand_pos = '\0';
       run_in_bg = 1;
     }
