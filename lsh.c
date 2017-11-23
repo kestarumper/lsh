@@ -53,7 +53,7 @@ pid_t spawn_process(char ** args, int in, int out)
 
   pid = fork();
   if(pid == 0) {
-  fprintf(stdout, "%s: IN[%i] --> OUT[%i]\n", args[0], in, out);
+  // fprintf(stdout, "%s: IN[%i] --> OUT[%i]\n", args[0], in, out);
     if(in != READ_FD) {
       dup2(in, STDIN_FILENO);
       close(in);
@@ -83,13 +83,8 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
 
   int i = 0;
 
-  com_args = lsh_split(commands[0], LSH_TOKEN_DELIMITERS);
+  // com_args = lsh_split(commands[0], LSH_TOKEN_DELIMITERS);
 
-  // Check if not empty
-  if (com_args[0] == NULL) {
-    // An empty command was entered.
-    return EXIT_SUCCESS;
-  }
 
   int fd[2];
   int in = READ_FD;
@@ -102,15 +97,13 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
       return 1;
     }
 
-    printf("%i zapisuje do %i\n", fd[WRITE_FD], fd[READ_FD]);
+    // printf("%i zapisuje do %i\n", fd[WRITE_FD], fd[READ_FD]);
 
     pid = spawn_process(com_args, in, fd[WRITE_FD]);
     close(fd[WRITE_FD]);
 
     in = fd[READ_FD];
   }
-
-  printf("in PARENT = %i\n", in);
 
   // Kod ktory zabral mi 8h mojego zycia
   // dup2 byl wykonywany rowniez w funkcji spawn_process
@@ -121,6 +114,11 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
   // }
 
   com_args = lsh_split(commands[i], LSH_TOKEN_DELIMITERS);
+  // Check if not empty
+  if (com_args[0] == NULL) {
+    // An empty command was entered.
+    return EXIT_SUCCESS;
+  }
   pid = spawn_process(com_args, in, WRITE_FD);
 
   // wait (or dont) for process
