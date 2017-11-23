@@ -246,8 +246,10 @@ int main()
 {
   printf("LSH Alpha\n");
 
+  // handle CTRL+C
   signal(SIGINT, ctrl_c_handler);
 
+  // remove zombies
   struct sigaction sigchld_action = {
     .sa_handler = SIG_DFL,
     .sa_flags = SA_NOCLDWAIT
