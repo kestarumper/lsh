@@ -208,45 +208,6 @@ char ** lsh_split(char * line, char * delims)
   return tokens;
 }
 
-// ls -l / | head | sort
-char ** lsh_pipes(char * line) 
-{
-  int bufsize = LSH_BUFSIZE;
-  char * token;
-  char ** tokens = malloc(sizeof(char*) * bufsize);
-  char ** tokens_temp;
-
-  if(!tokens) {
-    perror("lsh:pipes:malloc");
-    exit(EXIT_FAILURE);
-  }
-
-  token = strtok(line, "|");
-  int pos = 0;
-  while(token != NULL) {
-    tokens[pos] = token;
-    pos++;
-
-    if(pos >= bufsize) {
-      tokens_temp = tokens;
-      bufsize += LSH_BUFSIZE;
-      tokens = realloc(tokens, sizeof(char*) * bufsize);
-
-      if(!tokens) {
-        perror("lsh:pipes:realloc");
-        free(tokens_temp);
-        exit(EXIT_FAILURE);
-      }
-    }
-
-    token = strtok(NULL, "|");
-  }
-  // add NULL at the end to signal last element
-  tokens[pos] = NULL;
-
-  return tokens;
-}
-
 void lsh_loop()
 {
   char * line;
@@ -268,11 +229,9 @@ void lsh_loop()
       run_in_bg = 1;
     }
 
-    commands = lsh_pipes(line);
+    commands = lsh_split(line, "|");
 
-    for(comnum = 0; commands[comnum] != NULL; comnum++) {
-      // printf("#%i %s\n", comnum, commands[comnum]);
-    }
+    for(comnum = 0; commands[comnum] != NULL; comnum++);
 
     status = lsh_launch(commands, comnum, run_in_bg);
 
@@ -284,6 +243,12 @@ int main()
   printf("LSH Alpha\n");
 
   signal(SIGINT, ctrl_c_handler);
+
+  struct sigaction sigchld_action = {
+    .sa_handler = SIG_DFL,
+    .sa_flags = SA_NOCLDWAIT
+  };
+  sigaction(SIGCHLD, &sigchld_action, NULL);
 
   lsh_loop();
 
