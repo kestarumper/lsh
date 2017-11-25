@@ -4,6 +4,9 @@
 #include <wait.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define LSH_BUFSIZE 512
 #define LSH_TOKEN_DELIMITERS " \t\r\n"
@@ -88,6 +91,7 @@ int lsh_launch(char ** commands, int n, int run_in_bg, int redirect_type, char *
 
   int fd[2];
   int in = READ_FD;
+  int out = WRITE_FD;
   for (i = 0; i < n - 1; ++i)
   {
     com_args = lsh_split(commands[i], LSH_TOKEN_DELIMITERS);
@@ -128,13 +132,26 @@ int lsh_launch(char ** commands, int n, int run_in_bg, int redirect_type, char *
     }
   }
 
-  if(redirect_type > 0) {
+  if(redirect_type >= 0) {
     switch(redirect_type) {
-      //TODO
+      case STDOUT_FILENO:
+        out = creat(redirect_file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if(out < 0) {
+          perror("lsh:launch:fileopen:out");
+          return 1;
+        }
+        break;
+      case STDIN_FILENO:
+        in = open(redirect_file, O_RDONLY);
+        if(in < 0) {
+          perror("lsh:launch:fileopen:in");
+          return 1;
+        }
+        break;
     }
   }
   
-  pid = spawn_process(com_args, in, WRITE_FD);
+  pid = spawn_process(com_args, in, out);
 
   // wait (or dont) for process
   if(!run_in_bg) {
@@ -251,7 +268,6 @@ void lsh_loop()
       while(*redirect_file == ' ') { 
         redirect_file++;
       }
-      printf("Redirecting to file[%s]\n", redirect_file);
     }
 
     if(redirect_pos = strchr(line, '<')) {
@@ -261,7 +277,6 @@ void lsh_loop()
       while(*redirect_file == ' ') { 
         redirect_file++;
       }
-      printf("Redirecting from file[%s]\n", redirect_file);
     }
 
     commands = lsh_split(line, "|");
