@@ -4,11 +4,12 @@
 #include <wait.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define LSH_BUFSIZE 512
 #define LSH_TOKEN_DELIMITERS " \t\r\n"
-#define READ_FD 0
-#define WRITE_FD 1
 
 char ** lsh_split(char *, char *);
 
@@ -46,7 +47,7 @@ char * lsh_inbuilt_names[] = {
 
 int lsh_inbuilt_functions_size = (sizeof(lsh_inbuilt_names) / sizeof(char*));
 
-pid_t spawn_process(char ** args, int in, int out)
+pid_t spawn_process(char ** args, int in, int out, int err)
 {
   pid_t pid;
   int status;
@@ -54,13 +55,17 @@ pid_t spawn_process(char ** args, int in, int out)
   pid = fork();
   if(pid == 0) {
   // fprintf(stdout, "%s: IN[%i] --> OUT[%i]\n", args[0], in, out);
-    if(in != READ_FD) {
+    if(in != STDIN_FILENO) {
       dup2(in, STDIN_FILENO);
       close(in);
     }
-    if(out != WRITE_FD) {
+    if(out != STDOUT_FILENO) {
       dup2(out, STDOUT_FILENO);
       close(out);
+    }
+    if(err != STDERR_FILENO) {
+      dup2(err, STDERR_FILENO);
+      close(err);
     }
 
     if(execvp(args[0], args) == -1) {
@@ -73,7 +78,7 @@ pid_t spawn_process(char ** args, int in, int out)
   return pid;
 }
 
-int lsh_launch(char ** commands, int n, int run_in_bg)
+int lsh_launch(char ** commands, int n, int run_in_bg, int redirect_type, char * redirect_file)
 {
   char ** com_args;
 
@@ -87,7 +92,9 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
 
 
   int fd[2];
-  int in = READ_FD;
+  int in = STDIN_FILENO;
+  int out = STDOUT_FILENO;
+  int err = STDERR_FILENO;
   for (i = 0; i < n - 1; ++i)
   {
     com_args = lsh_split(commands[i], LSH_TOKEN_DELIMITERS);
@@ -97,19 +104,19 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
       return 1;
     }
 
-    // printf("%i zapisuje do %i\n", fd[WRITE_FD], fd[READ_FD]);
+    // printf("%i zapisuje do %i\n", fd[STDOUT_FILENO], fd[STDIN_FILENO]);
 
-    pid = spawn_process(com_args, in, fd[WRITE_FD]);
-    close(fd[WRITE_FD]);
+    pid = spawn_process(com_args, in, fd[STDOUT_FILENO], err);
+    close(fd[STDOUT_FILENO]);
 
-    in = fd[READ_FD];
+    in = fd[STDIN_FILENO];
   }
 
   // Kod ktory zabral mi 8h mojego zycia
   // dup2 byl wykonywany rowniez w funkcji spawn_process
   // co prowadzilo do... nie wiem czego, ale chyba zamykalo pipe'a
   // z ktorego potem szly same EOF'y
-  // if (in != READ_FD) {
+  // if (in != STDIN_FILENO) {
   //   dup2(in, STDIN_FILENO);
   // }
 
@@ -127,8 +134,35 @@ int lsh_launch(char ** commands, int n, int run_in_bg)
       return (*lsh_inbuilt_functions[i])(com_args);
     }
   }
+
+  if(redirect_type >= 0) {
+    switch(redirect_type) {
+      case STDOUT_FILENO:
+        out = creat(redirect_file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if(out < 0) {
+          perror("lsh:launch:fileopen:out");
+          return 1;
+        }
+        break;
+      case STDIN_FILENO:
+        in = open(redirect_file, O_RDONLY);
+        if(in < 0) {
+          perror("lsh:launch:fileopen:in");
+          return 1;
+        }
+        break;
+      case STDERR_FILENO:
+        printf("STDERR to %s\n", redirect_file);
+        err = creat(redirect_file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if(out < 0) {
+          perror("lsh:launch:fileopen:err");
+          return 1;
+        }
+        break;
+    }
+  }
   
-  pid = spawn_process(com_args, in, WRITE_FD);
+  pid = spawn_process(com_args, in, out, err);
 
   // wait (or dont) for process
   if(!run_in_bg) {
@@ -215,10 +249,15 @@ void lsh_loop()
   int status;
   int comnum;
   int run_in_bg;
+
+  char * redirect_file;
+  int redirect_type = -1;
+
   char * ampersand_pos = NULL;
   char * redirect_pos = NULL;
 
   do {
+    redirect_type = -1; // -1 means no redirect
     run_in_bg = 0;
     ampersand_pos = NULL;
     redirect_pos = NULL;
@@ -233,11 +272,43 @@ void lsh_loop()
       run_in_bg = 1;
     }
 
+    if(redirect_pos = strchr(line, '<')) {
+      redirect_type = STDIN_FILENO;
+      *redirect_pos = '\0';
+      redirect_file = redirect_pos+1;
+      while(*redirect_file == ' ') { 
+        redirect_file++;
+      }
+    }
+
+    if(redirect_pos = strchr(line, '2')) {
+      if(*(redirect_pos+1) == '>') {
+        redirect_type = STDERR_FILENO;
+        *redirect_pos = '\0';
+        *(redirect_pos+1) = '\0';
+        redirect_file = redirect_pos+2;
+        while(*redirect_file == ' ') { 
+          redirect_file++;
+        }
+      }
+    } else if(redirect_pos = strchr(line, '>')) {
+      redirect_type = STDOUT_FILENO;
+      *redirect_pos = '\0';
+      redirect_file = redirect_pos+1;
+      while(*redirect_file == ' ') { 
+        redirect_file++;
+      }
+    }
+
     commands = lsh_split(line, "|");
 
     for(comnum = 0; commands[comnum] != NULL; comnum++);
 
-    status = lsh_launch(commands, comnum, run_in_bg);
+    status = lsh_launch(commands, comnum, run_in_bg, redirect_type, redirect_file);
+
+    free(line);
+    // for(int i = 0; commands[i] != NULL; i++)
+    //   free(commands[i]);
 
   } while(1);
 }
@@ -246,8 +317,10 @@ int main()
 {
   printf("LSH Alpha\n");
 
+  // handle CTRL+C
   signal(SIGINT, ctrl_c_handler);
 
+  // remove zombies
   struct sigaction sigchld_action = {
     .sa_handler = SIG_DFL,
     .sa_flags = SA_NOCLDWAIT
