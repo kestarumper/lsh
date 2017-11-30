@@ -306,6 +306,10 @@ void lsh_loop()
 
     status = lsh_launch(commands, comnum, run_in_bg, redirect_type, redirect_file);
 
+    free(line);
+    // for(int i = 0; commands[i] != NULL; i++)
+    //   free(commands[i]);
+
   } while(1);
 }
 
